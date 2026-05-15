@@ -1,49 +1,71 @@
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse
+
 import cv2
 import os
 import numpy as np
 import tensorflow as tf
 
+# ==================================================
+# FASTAPI APP
+# ==================================================
+
 app = FastAPI()
 
-# ================= BASE DIRECTORY =================
+# ==================================================
+# BASE DIRECTORY
+# ==================================================
 
 BASE_DIR = os.path.dirname(
     os.path.abspath(__file__)
 )
 
-# ================= LOAD MODEL =================
+# ==================================================
+# LOAD MODEL
+# ==================================================
 
 MODEL_PATH = os.path.join(
     BASE_DIR,
-    "age_gender_model.h5"
+    "model_CNN_V2.h5"
 )
+
+model = None
 
 try:
 
-    model = tf.keras.models.load_model(
-        MODEL_PATH,
-        compile=False,
-        safe_mode=False
-    )
+    if os.path.exists(MODEL_PATH):
 
-    print("Model loaded successfully")
+        model = tf.keras.models.load_model(
+            MODEL_PATH,
+            compile=False
+        )
+
+        print("✅ Model loaded successfully")
+
+    else:
+
+        print(
+            f"❌ Model file not found: {MODEL_PATH}"
+        )
 
 except Exception as e:
 
-    print(f"Model loading error: {e}")
+    print(
+        f"❌ Model loading error: {e}"
+    )
 
-    model = None
-
-# ================= GENDER LABELS =================
+# ==================================================
+# GENDER LABELS
+# ==================================================
 
 gender_dict = {
     0: "Male",
     1: "Female"
 }
 
-# ================= FACE DETECTOR =================
+# ==================================================
+# FACE DETECTOR FILES
+# ==================================================
 
 FACE_PROTO = os.path.join(
     BASE_DIR,
@@ -55,12 +77,18 @@ FACE_MODEL = os.path.join(
     "opencv_face_detector_uint8.pb"
 )
 
+# ==================================================
+# LOAD FACE DETECTOR
+# ==================================================
+
 faceNet = cv2.dnn.readNet(
     FACE_MODEL,
     FACE_PROTO
 )
 
-# ================= DETECT FACES =================
+# ==================================================
+# FACE DETECTION FUNCTION
+# ==================================================
 
 def detect_faces(
     net,
@@ -85,26 +113,53 @@ def detect_faces(
 
     boxes = []
 
-    for i in range(detections.shape[2]):
+    for i in range(
+        detections.shape[2]
+    ):
 
-        confidence = detections[0, 0, i, 2]
+        confidence = detections[
+            0,
+            0,
+            i,
+            2
+        ]
 
         if confidence > conf_threshold:
 
             x1 = int(
-                detections[0, 0, i, 3] * w
+                detections[
+                    0,
+                    0,
+                    i,
+                    3
+                ] * w
             )
 
             y1 = int(
-                detections[0, 0, i, 4] * h
+                detections[
+                    0,
+                    0,
+                    i,
+                    4
+                ] * h
             )
 
             x2 = int(
-                detections[0, 0, i, 5] * w
+                detections[
+                    0,
+                    0,
+                    i,
+                    5
+                ] * w
             )
 
             y2 = int(
-                detections[0, 0, i, 6] * h
+                detections[
+                    0,
+                    0,
+                    i,
+                    6
+                ] * h
             )
 
             boxes.append(
@@ -113,7 +168,9 @@ def detect_faces(
 
     return boxes
 
-# ================= HOME =================
+# ==================================================
+# HOME ROUTE
+# ==================================================
 
 @app.get("/")
 def home():
@@ -122,7 +179,9 @@ def home():
         "message": "Server Running"
     }
 
-# ================= HEALTH CHECK =================
+# ==================================================
+# HEALTH ROUTE
+# ==================================================
 
 @app.get("/health")
 def health():
@@ -131,7 +190,26 @@ def health():
         "status": "ok"
     }
 
-# ================= PREDICT =================
+# ==================================================
+# MODEL STATUS ROUTE
+# ==================================================
+
+@app.get("/model-status")
+def model_status():
+
+    if model is None:
+
+        return {
+            "loaded": False
+        }
+
+    return {
+        "loaded": True
+    }
+
+# ==================================================
+# PREDICT ROUTE
+# ==================================================
 
 @app.post("/predict")
 async def predict(
@@ -140,7 +218,9 @@ async def predict(
 
     try:
 
-        # ---------- MODEL CHECK ----------
+        # ==========================================
+        # CHECK MODEL
+        # ==========================================
 
         if model is None:
 
@@ -151,7 +231,9 @@ async def predict(
                 }
             )
 
-        # ---------- READ IMAGE ----------
+        # ==========================================
+        # READ IMAGE
+        # ==========================================
 
         contents = await file.read()
 
@@ -174,7 +256,9 @@ async def predict(
                 }
             )
 
-        # ---------- DETECT FACE ----------
+        # ==========================================
+        # DETECT FACE
+        # ==========================================
 
         faces = detect_faces(
             faceNet,
@@ -190,7 +274,9 @@ async def predict(
                 }
             )
 
-        # ---------- TAKE FIRST FACE ----------
+        # ==========================================
+        # TAKE FIRST FACE
+        # ==========================================
 
         padding = 10
 
@@ -198,13 +284,21 @@ async def predict(
 
         face = image[
             max(0, y1 - padding):
-            min(y2 + padding, image.shape[0]),
+            min(
+                y2 + padding,
+                image.shape[0]
+            ),
 
             max(0, x1 - padding):
-            min(x2 + padding, image.shape[1])
+            min(
+                x2 + padding,
+                image.shape[1]
+            )
         ]
 
-        # ---------- PREPROCESS ----------
+        # ==========================================
+        # PREPROCESS IMAGE
+        # ==========================================
 
         face_gray = cv2.cvtColor(
             face,
@@ -216,9 +310,11 @@ async def predict(
             (128, 128)
         )
 
-        face_norm = face_resized.astype(
-            "float32"
-        ) / 255.0
+        face_norm = (
+            face_resized.astype(
+                "float32"
+            ) / 255.0
+        )
 
         face_input = face_norm.reshape(
             1,
@@ -227,32 +323,47 @@ async def predict(
             1
         )
 
-        # ---------- PREDICTION ----------
+        # ==========================================
+        # PREDICT
+        # ==========================================
 
         pred = model.predict(
             face_input,
             verbose=0
         )
 
-        gender = gender_dict[
-            int(
-                round(
-                    float(pred[0][0][0])
-                )
-            )
-        ]
+        # ==========================================
+        # EXTRACT OUTPUTS
+        # ==========================================
 
-        age = int(
+        gender_prediction = int(
             round(
-                float(pred[1][0][0])
+                float(
+                    pred[0][0][0]
+                )
             )
         )
 
-        # ---------- RESPONSE ----------
+        age_prediction = int(
+            round(
+                float(
+                    pred[1][0][0]
+                )
+            )
+        )
+
+        gender = gender_dict.get(
+            gender_prediction,
+            "Unknown"
+        )
+
+        # ==========================================
+        # RETURN RESPONSE
+        # ==========================================
 
         return {
             "gender": gender,
-            "age": age
+            "age": age_prediction
         }
 
     except Exception as e:
@@ -263,10 +374,3 @@ async def predict(
                 "error": str(e)
             }
         )
-@app.get("/model-status")
-def model_status():
-
-    if model is None:
-        return {"loaded": False}
-
-    return {"loaded": True}
