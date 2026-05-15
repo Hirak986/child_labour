@@ -332,25 +332,59 @@ async def predict(
             verbose=0
         )
 
+        print("Prediction Output:", pred)
+
         # ==========================================
-        # EXTRACT OUTPUTS
+        # HANDLE MODEL OUTPUT
         # ==========================================
 
-        gender_prediction = int(
-            round(
-                float(
-                    pred[0][0][0]
-                )
-            )
-        )
+        if isinstance(pred, list):
 
-        age_prediction = int(
-            round(
-                float(
-                    pred[1][0][0]
+            gender_prediction = int(
+                round(
+                    float(pred[0][0])
                 )
             )
-        )
+
+            age_prediction = int(
+                round(
+                    float(pred[1][0])
+                )
+            )
+
+        else:
+
+            pred_value = np.array(
+                pred
+            ).flatten()
+
+            if len(pred_value) >= 2:
+
+                gender_prediction = int(
+                    round(
+                        float(pred_value[0])
+                    )
+                )
+
+                age_prediction = int(
+                    round(
+                        float(pred_value[1])
+                    )
+                )
+
+            else:
+
+                gender_prediction = 0
+
+                age_prediction = int(
+                    round(
+                        float(pred_value[0])
+                    )
+                )
+
+        # ==========================================
+        # GENDER LABEL
+        # ==========================================
 
         gender = gender_dict.get(
             gender_prediction,
