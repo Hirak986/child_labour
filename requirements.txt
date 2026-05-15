@@ -3,7 +3,7 @@ uvicorn
 gunicorn
 python-multipart
 opencv-python-headless
-numpy
-tensorflow-cpu
+numpy==1.26.4
+tensorflow==2.15.0
 pillow
 h5py
