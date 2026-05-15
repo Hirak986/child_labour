@@ -263,3 +263,10 @@ async def predict(
                 "error": str(e)
             }
         )
+@app.get("/model-status")
+def model_status():
+
+    if model is None:
+        return {"loaded": False}
+
+    return {"loaded": True}
