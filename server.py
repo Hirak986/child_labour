@@ -300,14 +300,9 @@ async def predict(
         # PREPROCESS IMAGE
         # ==========================================
 
-        face_gray = cv2.cvtColor(
-            face,
-            cv2.COLOR_BGR2GRAY
-        )
-
         face_resized = cv2.resize(
-            face_gray,
-            (120, 120)
+            face,
+            (48, 48)
         )
 
         face_norm = (
@@ -318,9 +313,9 @@ async def predict(
 
         face_input = face_norm.reshape(
             1,
-            120,
-            120,
-            1
+            48,
+            48,
+            3
         )
 
         # ==========================================
@@ -335,52 +330,42 @@ async def predict(
         print("Prediction Output:", pred)
 
         # ==========================================
-        # HANDLE MODEL OUTPUT
+        # HANDLE OUTPUT
         # ==========================================
 
-        if isinstance(pred, list):
+        pred_value = np.array(
+            pred
+        ).flatten()
+
+        print("Flattened:", pred_value)
+
+        # ==========================================
+        # EXTRACT VALUES
+        # ==========================================
+
+        if len(pred_value) >= 2:
 
             gender_prediction = int(
                 round(
-                    float(pred[0][0])
+                    float(pred_value[0])
                 )
             )
 
             age_prediction = int(
                 round(
-                    float(pred[1][0])
+                    float(pred_value[1])
                 )
             )
 
         else:
 
-            pred_value = np.array(
-                pred
-            ).flatten()
+            gender_prediction = 0
 
-            if len(pred_value) >= 2:
-
-                gender_prediction = int(
-                    round(
-                        float(pred_value[0])
-                    )
+            age_prediction = int(
+                round(
+                    float(pred_value[0])
                 )
-
-                age_prediction = int(
-                    round(
-                        float(pred_value[1])
-                    )
-                )
-
-            else:
-
-                gender_prediction = 0
-
-                age_prediction = int(
-                    round(
-                        float(pred_value[0])
-                    )
-                )
+            )
 
         # ==========================================
         # GENDER LABEL
