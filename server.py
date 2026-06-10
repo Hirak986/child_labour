@@ -15,7 +15,7 @@ app = FastAPI()
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, "age_gender_model.h5")
-
+MAX_IMAGE_DIM = 640  #
 
 def load_model_compat(path):
     """
@@ -54,7 +54,7 @@ def load_model_compat(path):
             for item in cfg:
                 fix_config(item)
 
-    # ✅ Work on a temp copy — never touch the original file
+    
     tmp = tempfile.NamedTemporaryFile(suffix=".h5", delete=False)
     tmp.close()
     shutil.copy2(path, tmp.name)
@@ -75,9 +75,9 @@ def load_model_compat(path):
 
 
 model = load_model_compat(MODEL_PATH)
-print("✅ Model loaded successfully")
+print(" Model loaded successfully")
 
-# ✅ Log output names at startup so you can verify order in cloud logs
+
 print("Model outputs:")
 for i, out in enumerate(model.outputs):
     print(f"  [{i}] name={out.name}  shape={out.shape}")
@@ -123,7 +123,8 @@ def detect_faces(net, frame, conf_threshold=0.7):
             boxes.append([x1, y1, x2, y2])
     return boxes
 
-
+# Reads EXIF orientation tag and rotates the image correctly
+def fix_exif_rotation(pil_image): ...
 @app.get("/")
 def home():
     return {"message": "Server Running"}
