@@ -26,22 +26,12 @@ compile=False
 
 print("✅ Model Loaded Successfully")
 
-# ==================================================
 
-# GENDER LABELS
-
-# ==================================================
 
 gender_dict = {
 0: "Male",
 1: "Female"
 }
-
-# ==================================================
-
-# FACE DETECTOR FILES
-
-# ==================================================
 
 FACE_PROTO = os.path.join(
 BASE_DIR,
@@ -53,22 +43,14 @@ BASE_DIR,
 "opencv_face_detector_uint8.pb"
 )
 
-# ==================================================
-
-# LOAD FACE DETECTOR
-
-# ==================================================
+=
 
 faceNet = cv2.dnn.readNet(
 FACE_MODEL,
 FACE_PROTO
 )
 
-# ==================================================
 
-# FACE DETECTION FUNCTION
-
-# ==================================================
 
 def detect_faces(
 net,
@@ -76,7 +58,7 @@ frame,
 conf_threshold=0.7
 ):
 
-```
+
 h, w = frame.shape[:2]
 
 blob = cv2.dnn.blobFromImage(
@@ -135,11 +117,6 @@ for i in range(
 return boxes
 
 
-# ==================================================
-
-# HOME ROUTE
-
-# ==================================================
 
 @app.get("/")
 def home():
@@ -150,11 +127,7 @@ return {
 }
 
 
-# ==================================================
 
-# HEALTH ROUTE
-
-# ==================================================
 
 @app.get("/health")
 def health():
