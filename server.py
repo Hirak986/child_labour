@@ -5,7 +5,8 @@ import cv2
 import os
 import numpy as np
 from keras.models import load_model
-
+print("TF:", tf.__version__)
+print("Keras:", keras.__version__)
 
 app = FastAPI()
 
@@ -20,8 +21,9 @@ BASE_DIR,
 )
 
 model = load_model(
-MODEL_PATH,
-compile=False
+    MODEL_PATH,
+    compile=False,
+    safe_mode=False
 )
 
 print("✅ Model Loaded Successfully")
