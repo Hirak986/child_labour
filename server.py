@@ -1,90 +1,145 @@
-import cv2
-import cvlib as cv
-import numpy as np
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse
+import tensorflow as tf
+import cv2
+import os
+import numpy as np
+import h5py
+import json
 
-# Initialize FastAPI application
-app = FastAPI(
-    title="Gender Detection API",
-    description="Upload an image to detect faces and predict gender (Male/Female).",
-    version="1.0.0"
-)
+print("TF:", tf.__version__)
+
+app = FastAPI()
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(BASE_DIR, "age_gender_model.h5")
+
+
+def load_model_compat(path):
+    def fix_config(cfg):
+        if isinstance(cfg, dict):
+            inner = cfg.get("config", {})
+            if isinstance(inner, dict):
+                # Fix DTypePolicy dict → plain string
+                if isinstance(inner.get("dtype"), dict):
+                    inner["dtype"] = inner["dtype"].get("config", {}).get("name", "float32")
+
+                # Remove unsupported keys from ANY layer
+                inner.pop("quantization_config", None)
+                inner.pop("optional", None)
+
+                # Fix InputLayer specifically
+                if cfg.get("class_name") == "InputLayer":
+                    if "batch_shape" in inner:
+                        inner["batch_input_shape"] = inner.pop("batch_shape")
+
+                # Recurse into inner config values
+                for v in inner.values():
+                    fix_config(v)
+
+            # Remove Keras 3 top-level metadata
+            cfg.pop("module", None)
+            cfg.pop("registered_name", None)
+            for key in ["build_config", "call_spec", "keras_version"]:
+                cfg.pop(key, None)
+
+            # Recurse into all top-level values
+            for v in list(cfg.values()):
+                fix_config(v)
+
+        elif isinstance(cfg, list):
+            for item in cfg:
+                fix_config(item)
+
+    with h5py.File(path, "r+") as f:
+        raw = f.attrs.get("model_config")
+        if raw is not None:
+            model_config = json.loads(raw)
+            fix_config(model_config)
+            f.attrs["model_config"] = json.dumps(model_config)
+
+    return tf.keras.models.load_model(path, compile=False)
+
+
+model = load_model_compat(MODEL_PATH)
+print("✅ Model Loaded Successfully")
+
+gender_dict = {0: "Male", 1: "Female"}
+
+FACE_PROTO = os.path.join(BASE_DIR, "opencv_face_detector.pbtxt")
+FACE_MODEL = os.path.join(BASE_DIR, "opencv_face_detector_uint8.pb")
+faceNet = cv2.dnn.readNet(FACE_MODEL, FACE_PROTO)
+
+
+def detect_faces(net, frame, conf_threshold=0.7):
+    h, w = frame.shape[:2]
+    blob = cv2.dnn.blobFromImage(
+        frame, 1.0, (300, 300), [104, 117, 123], False, False
+    )
+    net.setInput(blob)
+    detections = net.forward()
+    boxes = []
+    for i in range(detections.shape[2]):
+        confidence = detections[0, 0, i, 2]
+        if confidence > conf_threshold:
+            x1 = int(detections[0, 0, i, 3] * w)
+            y1 = int(detections[0, 0, i, 4] * h)
+            x2 = int(detections[0, 0, i, 5] * w)
+            y2 = int(detections[0, 0, i, 6] * h)
+            boxes.append([x1, y1, x2, y2])
+    return boxes
+
 
 @app.get("/")
-def read_root():
-    """Health check endpoint."""
-    return {"status": "online", "message": "Gender Detection API is running"}
+def home():
+    return {"message": "Server Running"}
 
-@app.post("/predict-gender/")
-async def predict_gender(file: UploadFile = File(...)):
-    """
-    Upload an image file to detect the gender of faces present.
-    Supported formats: JPEG, PNG
-    """
-    # 1. Validate file extension
-    if not file.filename.lower().endswith(('.png', '.jpg', '.jpeg')):
-        raise HTTPException(status_code=400, detail="Invalid image format. Please upload JPG or PNG.")
 
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+@app.get("/model-status")
+def model_status():
+    return {"loaded": True}
+
+
+@app.post("/predict")
+async def predict(file: UploadFile = File(...)):
     try:
-        # 2. Read image bytes into numpy array
         contents = await file.read()
         nparr = np.frombuffer(contents, np.uint8)
         image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
         if image is None:
-            raise HTTPException(status_code=400, detail="Could not decode the uploaded image.")
+            return JSONResponse(status_code=400, content={"error": "Invalid image"})
 
-        # 3. Detect faces in the image
-        faces, confidences = cv.detect_face(image)
+        faces = detect_faces(faceNet, image)
+        if len(faces) == 0:
+            return JSONResponse(status_code=400, content={"error": "No face detected"})
 
-        if not faces:
-            return JSONResponse(content={
-                "face_count": 0,
-                "predictions": [],
-                "message": "No faces detected in the image."
-            })
+        padding = 10
+        x1, y1, x2, y2 = faces[0]
+        face = image[
+            max(0, y1 - padding): min(y2 + padding, image.shape[0]),
+            max(0, x1 - padding): min(x2 + padding, image.shape[1]),
+        ]
 
-        results = []
+        face_gray = cv2.cvtColor(face, cv2.COLOR_BGR2GRAY)
+        face_resized = cv2.resize(face_gray, (128, 128))
+        face_norm = face_resized / 255.0
+        face_input = face_norm.reshape(1, 128, 128, 1)
 
-        # 4. Loop through detected faces and predict gender
-        for idx, face in enumerate(faces):
-            start_x, start_y, end_x, end_y = face
+        pred = model.predict(face_input, verbose=0)
 
-            # Ensure coordinates are within image boundaries
-            start_x, start_y = max(0, start_x), max(0, start_y)
-            end_x, end_y = min(image.shape[1], end_x), min(image.shape[0], end_y)
+        gender_raw = pred[0].flatten()[0]
+        age_raw = pred[1].flatten()[0]
 
-            # Crop the detected face
-            face_crop = np.copy(image[start_y:end_y, start_x:end_x])
+        gender = gender_dict[int(round(float(gender_raw)))]
+        age = max(0, int(round(float(age_raw))))
 
-            if face_crop.shape[0] < 10 or face_crop.shape[1] < 10:
-                continue # Skip tiny, unresolvable artifacts
-
-            # Predict gender on the cropped face
-            labels, confs = cv.detect_gender(face_crop)
-
-            # Get highest confidence prediction
-            best_idx = np.argmax(confs)
-            gender_label = labels[best_idx]
-            gender_confidence = float(confs[best_idx])
-
-            results.append({
-                "face_index": idx + 1,
-                "gender": gender_label,
-                "confidence": round(gender_confidence, 4),
-                "box": {
-                    "xmin": start_x,
-                    "ymin": start_y,
-                    "xmax": end_x,
-                    "ymax": end_y
-                }
-            })
-
-        return JSONResponse(content={
-            "face_count": len(results),
-            "predictions": results
-        })
+        return {"gender": gender, "age": age}
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
