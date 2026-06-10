@@ -100,24 +100,21 @@ def home():
 
 
 
-
 @app.get("/health")
 def health():
 
-
-return {
-    "status": "ok"
-}
+    return {
+        "status": "ok"
+    }
 
 
 
 @app.get("/model-status")
 def model_status():
 
-
-return {
-    "loaded": True
-}
+    return {
+        "loaded": True
+    }
 
 
 
