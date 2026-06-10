@@ -6,29 +6,13 @@ import os
 import numpy as np
 from tensorflow.keras.models import load_model
 
-# ==================================================
-
-# FASTAPI APP
-
-# ==================================================
 
 app = FastAPI()
-
-# ==================================================
-
-# BASE DIRECTORY
-
-# ==================================================
 
 BASE_DIR = os.path.dirname(
 os.path.abspath(__file__)
 )
 
-# ==================================================
-
-# LOAD MODEL
-
-# ==================================================
 
 MODEL_PATH = os.path.join(
 BASE_DIR,
@@ -149,7 +133,7 @@ for i in range(
         )
 
 return boxes
-```
+
 
 # ==================================================
 
@@ -160,11 +144,11 @@ return boxes
 @app.get("/")
 def home():
 
-```
+
 return {
     "message": "Server Running"
 }
-```
+
 
 # ==================================================
 
@@ -175,39 +159,29 @@ return {
 @app.get("/health")
 def health():
 
-```
+
 return {
     "status": "ok"
 }
-```
 
-# ==================================================
 
-# MODEL STATUS ROUTE
-
-# ==================================================
 
 @app.get("/model-status")
 def model_status():
 
-```
+
 return {
     "loaded": True
 }
-```
 
-# ==================================================
 
-# PREDICT ROUTE
-
-# ==================================================
 
 @app.post("/predict")
 async def predict(
 file: UploadFile = File(...)
 ):
 
-```
+
 try:
 
     contents = await file.read()
@@ -257,7 +231,7 @@ try:
         min(x2+padding, image.shape[1])
     ]
 
-    # SAME PREPROCESSING AS WORKING LOCAL MODEL
+   
 
     face_gray = cv2.cvtColor(
         face,
