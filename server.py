@@ -4,8 +4,8 @@ from fastapi.responses import JSONResponse
 import cv2
 import os
 import numpy as np
-from keras.models import load_model
-print("TF:", tf.__version__)
+from tensorflow.keras.models import load_model
+print("TF:", tensorflow.__version__)
 print("Keras:", keras.__version__)
 
 app = FastAPI()
