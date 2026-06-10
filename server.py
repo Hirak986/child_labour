@@ -17,7 +17,7 @@ app = FastAPI()
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, "age_gender_model.h5")
-MAX_IMAGE_DIM = 640  # now actually used
+MAX_IMAGE_DIM = 640
 
 
 def load_model_compat(path):
@@ -67,7 +67,9 @@ print("Model outputs:")
 for i, out in enumerate(model.outputs):
     print(f"  [{i}] name={out.name}  shape={out.shape}")
 
-gender_idx, age_idx = 0, 1
+# FIX: swapped — output_0 is age, output_1 is gender
+gender_idx, age_idx = 1, 0
+
 for i, out in enumerate(model.outputs):
     name = out.name.lower()
     if "gender" in name:
@@ -85,7 +87,6 @@ faceNet = cv2.dnn.readNet(FACE_MODEL, FACE_PROTO)
 
 
 def fix_exif_rotation(pil_image):
-    """Rotate image to correct orientation based on EXIF data."""
     try:
         exif_data = pil_image._getexif()
         if exif_data is None:
@@ -100,12 +101,11 @@ def fix_exif_rotation(pil_image):
         if orientation in rotation_map:
             pil_image = pil_image.rotate(rotation_map[orientation], expand=True)
     except Exception:
-        pass  # No EXIF or unreadable — leave image as-is
+        pass
     return pil_image
 
 
 def resize_if_large(image, max_dim=MAX_IMAGE_DIM):
-    """Downscale image if either dimension exceeds max_dim."""
     h, w = image.shape[:2]
     if max(h, w) <= max_dim:
         return image
@@ -134,15 +134,11 @@ def detect_faces(net, frame, conf_threshold=0.7):
 
 
 def decode_image_from_bytes(contents):
-    """Decode image bytes, fixing EXIF rotation if needed."""
-    # Fix EXIF rotation via PIL first
     try:
         pil_img = Image.open(io.BytesIO(contents)).convert("RGB")
         pil_img = fix_exif_rotation(pil_img)
-        # Convert PIL → OpenCV (BGR)
         image = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
     except Exception:
-        # Fallback to raw OpenCV decode if PIL fails
         nparr = np.frombuffer(contents, np.uint8)
         image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     return image
@@ -179,7 +175,6 @@ async def predict(file: UploadFile = File(...)):
         if image is None:
             return JSONResponse(status_code=400, content={"error": "Invalid image"})
 
-        # FIX: actually use MAX_IMAGE_DIM to resize large images
         image = resize_if_large(image)
 
         faces = detect_faces(faceNet, image)
@@ -193,7 +188,6 @@ async def predict(file: UploadFile = File(...)):
             max(0, x1 - padding): min(x2 + padding, image.shape[1]),
         ]
 
-        # FIX: guard against empty crop
         if face.size == 0:
             return JSONResponse(status_code=400, content={"error": "Face crop failed"})
 
@@ -204,13 +198,14 @@ async def predict(file: UploadFile = File(...)):
 
         pred = model.predict(face_input, verbose=0)
 
-        gender_raw = float(pred[gender_idx].flatten()[0])
+        # FIX: age is output_0, scale 0-1 → 0-100
         age_raw = float(pred[age_idx].flatten()[0])
+        age = max(0, int(round(age_raw * 100)))
 
-        # FIX: clamp gender to [0,1] before rounding to avoid KeyError
+        # FIX: gender is output_1, clamp to [0,1]
+        gender_raw = float(pred[gender_idx].flatten()[0])
         gender_raw = max(0.0, min(1.0, gender_raw))
         gender = gender_dict[int(round(gender_raw))]
-        age = max(0, int(round(age_raw)))
 
         return {"gender": gender, "age": age}
 
@@ -252,16 +247,21 @@ async def predict_debug(file: UploadFile = File(...)):
         raw_outputs = {f"output_{i}_name": model.outputs[i].name for i in range(len(pred))}
         raw_values = {f"output_{i}_value": float(pred[i].flatten()[0]) for i in range(len(pred))}
 
-        gender_raw = max(0.0, min(1.0, float(pred[gender_idx].flatten()[0])))
+        # FIX: age is output_0, scale 0-1 → 0-100
         age_raw = float(pred[age_idx].flatten()[0])
+        age = max(0, int(round(age_raw * 100)))
+
+        # FIX: gender is output_1, clamp to [0,1]
+        gender_raw = max(0.0, min(1.0, float(pred[gender_idx].flatten()[0])))
+        gender = gender_dict[int(round(gender_raw))]
 
         return {
             "output_names": raw_outputs,
             "raw_values": raw_values,
             "gender_idx_used": gender_idx,
             "age_idx_used": age_idx,
-            "predicted_gender": gender_dict[int(round(gender_raw))],
-            "predicted_age": max(0, int(round(age_raw))),
+            "predicted_gender": gender,
+            "predicted_age": age,
             "face_box": faces[0],
             "image_shape": list(image.shape),
         }
