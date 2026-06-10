@@ -11,3 +11,6 @@ COPY . .
 EXPOSE 10000
 
 CMD ["gunicorn", "-w", "1", "-k", "uvicorn.workers.UvicornWorker", "server:app", "--bind", "0.0.0.0:10000"]
+
+# Install Keras 3 + compatible TF backend
+RUN pip install --upgrade keras tensorflow
