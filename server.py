@@ -16,24 +16,41 @@ MODEL_PATH = os.path.join(BASE_DIR, "age_gender_model.h5")
 
 
 def load_model_compat(path):
-    """
-    Patches legacy Keras config keys (batch_shape, optional) before loading,
-    so the model works regardless of the installed Keras version.
-    """
     def fix_config(cfg):
         if isinstance(cfg, dict):
-            if cfg.get("class_name") == "InputLayer":
-                inner = cfg.get("config", {})
-                if "batch_shape" in inner:
-                    inner["batch_input_shape"] = inner.pop("batch_shape")
+            inner = cfg.get("config", {})
+            if isinstance(inner, dict):
+                # Fix DTypePolicy dict → plain string
+                if isinstance(inner.get("dtype"), dict):
+                    inner["dtype"] = inner["dtype"].get("config", {}).get("name", "float32")
+
+                # Remove unsupported keys from ANY layer
+                inner.pop("quantization_config", None)
                 inner.pop("optional", None)
-            for v in cfg.values():
+
+                # Fix InputLayer specifically
+                if cfg.get("class_name") == "InputLayer":
+                    if "batch_shape" in inner:
+                        inner["batch_input_shape"] = inner.pop("batch_shape")
+
+                # Recurse into inner config values
+                for v in inner.values():
+                    fix_config(v)
+
+            # Remove Keras 3 top-level metadata
+            cfg.pop("module", None)
+            cfg.pop("registered_name", None)
+            for key in ["build_config", "call_spec", "keras_version"]:
+                cfg.pop(key, None)
+
+            # Recurse into all top-level values
+            for v in list(cfg.values()):
                 fix_config(v)
+
         elif isinstance(cfg, list):
             for item in cfg:
                 fix_config(item)
 
-    # Patch the stored config inside the .h5 file
     with h5py.File(path, "r+") as f:
         raw = f.attrs.get("model_config")
         if raw is not None:
@@ -116,13 +133,11 @@ async def predict(file: UploadFile = File(...)):
 
         pred = model.predict(face_input, verbose=0)
 
-        # pred is a list of outputs: [gender_output, age_output]
-        # Each output shape: (1, 1) — flatten safely with .item()
-        gender_raw = pred[0].flatten()[0]   # sigmoid → 0.0–1.0
-        age_raw    = pred[1].flatten()[0]   # regression value
+        gender_raw = pred[0].flatten()[0]
+        age_raw = pred[1].flatten()[0]
 
         gender = gender_dict[int(round(float(gender_raw)))]
-        age = max(0, int(round(float(age_raw))))  # clamp negatives
+        age = max(0, int(round(float(age_raw))))
 
         return {"gender": gender, "age": age}
 
