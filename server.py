@@ -21,7 +21,7 @@ app = FastAPI()
 # ==================================================
 
 BASE_DIR = os.path.dirname(
-os.path.abspath(**file**)
+os.path.abspath(__file__)
 )
 
 # ==================================================
