@@ -94,10 +94,9 @@ def detect_faces(
 @app.get("/")
 def home():
 
-
-return {
-    "message": "Server Running"
-}
+    return {
+        "message": "Server Running"
+    }
 
 
 
