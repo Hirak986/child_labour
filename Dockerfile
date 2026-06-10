@@ -1,16 +1,8 @@
 FROM python:3.10
-
 WORKDIR /app
-
 COPY requirements.txt .
-
 RUN pip install --no-cache-dir -r requirements.txt
-
+RUN pip install "tensorflow==2.16.1" "keras==3.3.3"
 COPY . .
-
 EXPOSE 10000
-
 CMD ["gunicorn", "-w", "1", "-k", "uvicorn.workers.UvicornWorker", "server:app", "--bind", "0.0.0.0:10000"]
-
-# Install Keras 3 + compatible TF backend
-RUN pip install --upgrade keras tensorflow
