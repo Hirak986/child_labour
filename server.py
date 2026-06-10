@@ -53,69 +53,42 @@ FACE_PROTO
 
 
 def detect_faces(
-net,
-frame,
-conf_threshold=0.7
-):
-
-
-h, w = frame.shape[:2]
-
-blob = cv2.dnn.blobFromImage(
+    net,
     frame,
-    1.0,
-    (300, 300),
-    [104, 117, 123],
-    False,
-    False
-)
-
-net.setInput(blob)
-
-detections = net.forward()
-
-boxes = []
-
-for i in range(
-    detections.shape[2]
+    conf_threshold=0.7
 ):
 
-    confidence = detections[
-        0, 0, i, 2
-    ]
+    h, w = frame.shape[:2]
 
-    if confidence > conf_threshold:
+    blob = cv2.dnn.blobFromImage(
+        frame,
+        1.0,
+        (300, 300),
+        [104, 117, 123],
+        False,
+        False
+    )
 
-        x1 = int(
-            detections[
-                0, 0, i, 3
-            ] * w
-        )
+    net.setInput(blob)
 
-        y1 = int(
-            detections[
-                0, 0, i, 4
-            ] * h
-        )
+    detections = net.forward()
 
-        x2 = int(
-            detections[
-                0, 0, i, 5
-            ] * w
-        )
+    boxes = []
 
-        y2 = int(
-            detections[
-                0, 0, i, 6
-            ] * h
-        )
+    for i in range(detections.shape[2]):
 
-        boxes.append(
-            [x1, y1, x2, y2]
-        )
+        confidence = detections[0, 0, i, 2]
 
-return boxes
+        if confidence > conf_threshold:
 
+            x1 = int(detections[0, 0, i, 3] * w)
+            y1 = int(detections[0, 0, i, 4] * h)
+            x2 = int(detections[0, 0, i, 5] * w)
+            y2 = int(detections[0, 0, i, 6] * h)
+
+            boxes.append([x1, y1, x2, y2])
+
+    return boxes
 
 
 @app.get("/")
