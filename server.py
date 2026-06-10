@@ -43,7 +43,7 @@ BASE_DIR,
 "opencv_face_detector_uint8.pb"
 )
 
-=
+
 
 faceNet = cv2.dnn.readNet(
 FACE_MODEL,
